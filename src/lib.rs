@@ -95,10 +95,6 @@ macro_rules! interface {
         #[unsafe_destructor]
         impl<'cls> ::std::ops::Drop for $crate::Instance<'cls, $Trait + 'cls> {
             fn drop(&mut self) {
-                use std::{mem, raw};
-                use std::rt::heap;
-                use std::ops::Deref;
-
                 // Virtual destructors are a bit messed up in Rust at the
                 // moment. We avoid the problem by requiring Impl: Copy on
                 // Class::of::<Impl>().  So here in drop we just free the
@@ -109,9 +105,7 @@ macro_rules! interface {
                         let cls = (*self.__class__).0.borrow();
                         (cls.size, cls.align)
                     };
-                    let obj: &($Trait + 'cls) = Deref::deref(self);
-                    let obj: raw::TraitObject = mem::transmute(obj);
-                    heap::deallocate(obj.data as *mut u8, size, align);
+                    std::rt::heap::deallocate(self.__data__ as *mut u8, size, align);
                 }
             }
         }
@@ -129,14 +123,13 @@ macro_rules! constructor {
             unsafe fn get_class(self) -> $crate::Class<$Trait + 'a, $CtorArg> {
                 use std::{mem, raw};
                 use std::ptr;
-                use std::rt::heap;
                 use std::cell::RefCell;
 
                 fn ctor($arg: $CtorArg) -> $Impl
                     $body
 
                 unsafe fn box_ctor(arg: $CtorArg) -> *mut () {
-                    let obj = heap::allocate(mem::size_of::<$Impl>(),
+                    let obj = std::rt::heap::allocate(mem::size_of::<$Impl>(),
                         mem::align_of::<$Impl>());
                     ptr::write(obj as *mut $Impl, ctor(arg));
                     obj as *mut ()
