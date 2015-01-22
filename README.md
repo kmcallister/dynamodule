@@ -24,7 +24,6 @@ interface!(Vehicle);
 Trait impls, paired with a constructor, are the basis for classes.
 
 ```rust
-#[derive(Copy)]
 struct Bicycle(&'static str);
 
 constructor!(Bicycle as Vehicle,

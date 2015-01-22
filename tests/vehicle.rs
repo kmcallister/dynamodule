@@ -16,7 +16,6 @@ interface!(Vehicle);
 // Cars are boring.  Let's ride bikes!  Specifically, let's define two distinct
 // types implementing the Vehicle trait.
 macro_rules! vehicle_impl { ($Vehicle:ident) => {
-    #[derive(Copy)]
     struct $Vehicle {
         color: &'static str,
     }
