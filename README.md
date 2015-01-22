@@ -82,5 +82,61 @@ That's the theory, anyway!  Here it's *really* important that `Bicycle` and
 `Motorcycle` have the same in-memory representation.  Future work will explore
 forward-compatible `self` types.
 
+## Virtual destructors
+
+Instance types can have destructors:
+
+```rust
+trait Thing { }
+interface!(Thing);
+
+static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+
+struct Foo; impl Thing for Foo { }
+
+constructor!(Foo as Thing,
+    fn new(_x: ()) -> ... { Foo }
+);
+
+impl Drop for Foo {
+    fn drop(&mut self) {
+        COUNT.fetch_add(1, Ordering::SeqCst);
+    }
+}
+```
+
+dynamodule supports these as "virtual destructors" with dynamic dispatch:
+
+```rust
+let cls: Class<Thing, _> = Class::of::<Foo>();
+
+assert_eq!(COUNT.load(Ordering::SeqCst), 0);
+
+{
+    let ins: Instance<Thing> = cls.new(());
+    let _ = ins;
+}
+
+assert_eq!(COUNT.load(Ordering::SeqCst), 1);
+```
+
+Actually, this bypasses Rust's built-in virtual destructors for boxed trait
+objects, which have some issues.  It also means we can override the destructor:
+
+```rust
+unsafe {
+    cls.override_methods(&Class::of::<Nothing>());
+}
+
+{
+    let ins: Instance<Thing> = cls.new(());
+    let _ = ins;
+}
+
+assert_eq!(COUNT.load(Ordering::SeqCst), 1);
+```
+
+## Other examples
+
 I don't have a plugin example working yet, but you can see a single-crate
 example in `tests/vehicle.rs`.

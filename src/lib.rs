@@ -27,6 +27,7 @@ pub struct Class<Trait: ?Sized, Arg>
 pub struct Class_<Trait: ?Sized, Arg> {
     pub vtable: *mut (),
     pub ctor: unsafe fn(Arg) -> *mut (),
+    pub dtor: unsafe fn(*mut ()),
     pub size: usize,
     pub align: usize,
 }
@@ -36,6 +37,7 @@ impl<Trait: ?Sized, Arg> Clone for Class_<Trait, Arg> {
     fn clone(&self) -> Class_<Trait, Arg> {
         Class_ {
             ctor: self.ctor,
+            dtor: self.dtor,
             vtable: self.vtable,
             size: self.size,
             align: self.align,
@@ -55,14 +57,10 @@ pub struct Instance<'cls, Trait: ?Sized + 'cls> {
 #[unsafe_destructor]
 impl<'cls, Trait: ?Sized> Drop for Instance<'cls, Trait> {
     fn drop(&mut self) {
-        // Virtual destructors are a bit messed up in Rust at the
-        // moment. We avoid the problem by requiring Impl: Copy on
-        // Class::of::<Impl>().  So here in drop we just free the
-        // memory.
-
         unsafe {
             let (size, align) = {
                 let cls = (*self.__class__).0.borrow();
+                (cls.dtor)(self.__data__);
                 (cls.size, cls.align)
             };
             std::rt::heap::deallocate(self.__data__ as *mut u8, size, align);
@@ -72,8 +70,7 @@ impl<'cls, Trait: ?Sized> Drop for Instance<'cls, Trait> {
 
 impl<Trait: ?Sized, Arg> Class<Trait, Arg> {
     pub fn of<Impl>() -> Class<Trait, Arg>
-        where Impl: Copy,
-              Proxy<Impl>: ReflectImpl<Trait, CtorArg=Arg>,
+        where Proxy<Impl>: ReflectImpl<Trait, CtorArg=Arg>,
     {
         let prx: Proxy<Impl> = Proxy;
         unsafe { prx.get_class() }
@@ -137,8 +134,13 @@ macro_rules! constructor {
                     obj as *mut ()
                 }
 
+                unsafe fn dtor(arg: *mut ()) {
+                    let _ = std::ptr::read(arg as *const $Impl);
+                }
+
                 $crate::Class(RefCell::new($crate::Class_ {
                     ctor: box_ctor,
+                    dtor: dtor,
                     vtable: {
                         let x: $Impl = mem::uninitialized();
                         let vtable = {
