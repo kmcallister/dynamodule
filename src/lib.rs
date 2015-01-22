@@ -1,3 +1,5 @@
+#![feature(unsafe_destructor)]
+
 #![deny(warnings)]
 #![allow(unstable)]
 
@@ -50,6 +52,24 @@ pub struct Instance<'cls, Trait: ?Sized + 'cls> {
     #[doc(hidden)] pub __data__: *mut (),
 }
 
+#[unsafe_destructor]
+impl<'cls, Trait: ?Sized> Drop for Instance<'cls, Trait> {
+    fn drop(&mut self) {
+        // Virtual destructors are a bit messed up in Rust at the
+        // moment. We avoid the problem by requiring Impl: Copy on
+        // Class::of::<Impl>().  So here in drop we just free the
+        // memory.
+
+        unsafe {
+            let (size, align) = {
+                let cls = (*self.__class__).0.borrow();
+                (cls.size, cls.align)
+            };
+            std::rt::heap::deallocate(self.__data__ as *mut u8, size, align);
+        }
+    }
+}
+
 impl<Trait: ?Sized, Arg> Class<Trait, Arg> {
     pub fn of<Impl>() -> Class<Trait, Arg>
         where Impl: Copy,
@@ -88,24 +108,6 @@ macro_rules! interface {
                         data: self.__data__,
                         vtable: (*self.__class__).0.borrow().vtable,
                     })
-                }
-            }
-        }
-
-        #[unsafe_destructor]
-        impl<'cls> ::std::ops::Drop for $crate::Instance<'cls, $Trait + 'cls> {
-            fn drop(&mut self) {
-                // Virtual destructors are a bit messed up in Rust at the
-                // moment. We avoid the problem by requiring Impl: Copy on
-                // Class::of::<Impl>().  So here in drop we just free the
-                // memory.
-
-                unsafe {
-                    let (size, align) = {
-                        let cls = (*self.__class__).0.borrow();
-                        (cls.size, cls.align)
-                    };
-                    std::rt::heap::deallocate(self.__data__ as *mut u8, size, align);
                 }
             }
         }
